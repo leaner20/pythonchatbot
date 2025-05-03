@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Support Bot</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        #chatbox {
+            height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #input-area {
+            display: flex;
+            gap: 10px;
+        }
+        #userInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .user-message {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background-color: #eaf2f8;
+            border-radius: 18px;
+            display: inline-block;
+            max-width: 80%;
+        }
+        .bot-message {
+            color: #34495e;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background-color: #e8f8f5;
+            border-radius: 18px;
+            display: inline-block;
+            max-width: 80%;
+        }
+        .suggestion {
+            font-style: italic;
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        .error {
+            color: #e74c3c;
+        }
+        #status {
+            text-align: center;
+            color: #7f8c8d;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Support Bot</h1>
+    <div id="status">Enter a question to begin...</div>
+    <div id="chatbox"></div>
+    <div id="input-area">
+        <input type="text" id="userInput" placeholder="Type your question here..." autocomplete="off">
+        <button id="sendButton" onclick="sendQuestion()">Send</button>
+    </div>
+
+    <script>
+        const chatbox = document.getElementById('chatbox');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const statusDiv = document.getElementById('status');
+
+        // Handle Enter key press
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendQuestion();
+            }
+        });
+
+        async function sendQuestion() {
+            const question = userInput.value.trim();
+            if (!question) return;
+
+            // Disable input during processing
+            userInput.disabled = true;
+            sendButton.disabled = true;
+            statusDiv.textContent = "Thinking...";
+
+            // Add user question to chat
+            addMessage('user', question);
+            userInput.value = '';
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Add bot response
+                let message = data.answer;
+                if (data.matched_question && data.confidence === 'fuzzy') {
+                    message += `<div class="suggestion">(Matched question: "${data.matched_question}")</div>`;
+                }
+                if (data.suggestions) {
+                    message += `<div class="suggestion">Try asking:<br>• ${data.suggestions.join('<br>• ')}</div>`;
+                }
+
+                addMessage('bot', message);
+                statusDiv.textContent = "Ready for your next question";
+
+            } catch (error) {
+                addMessage('error', `Failed to get response: ${error.message}`);
+                statusDiv.textContent = "Error occurred - please try again";
+            } finally {
+                userInput.disabled = false;
+                sendButton.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        function addMessage(sender, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `${sender}-message`;
+            messageDiv.innerHTML = `
+                <strong>${sender === 'user' ? 'You' : 'Bot'}:</strong> ${content}
+            `;
+            chatbox.appendChild(messageDiv);
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
+
+        // Initialization check
+        (async function init() {
+            try {
+                statusDiv.textContent = "Initializing bot...";
+                const response = await fetch('/init', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: window.location.href })
+                });
+                const data = await response.json();
+                statusDiv.textContent = "Ready - ask me anything!";
+            } catch (e) {
+                statusDiv.textContent = "Initialization failed - refresh to try again";
+                addMessage('error', 'Failed to initialize bot');
+            }
+        })();
+    </script>
+</body>
+</html>
